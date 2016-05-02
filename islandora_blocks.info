@@ -1,0 +1,5 @@
+name = Islandora Info Blocks
+description = Provides additional blocks for rendering various pieces of information about Islandora objects.
+core = 7.x
+
+dependencies[] = islandora

@@ -1,0 +1,140 @@
+<?php
+
+/**
+ * Implements hook_theme().
+ */
+function islandora_blocks_theme($existing, $type, $theme, $path) {
+  return array(
+    'islandora_blocks_datastreams' => array(
+      'template' => 'templates/islandora-blocks-datastreams',
+      'variables' => array('datastreams' => array()),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function islandora_blocks_block_info() {
+
+  $blocks['metadata'] = array(
+    'info' => t('Object Metadata'),
+  );
+
+  $blocks['collections'] = array(
+    'info' => t('Object Collections'),
+  );
+
+  $blocks['datastreams'] = array(
+    'info' => t('Object Datastreams'),
+  );
+
+  if (module_exists('csl')) {
+    $blocks['citation'] = array(
+      'info' => t('Object Citation'),
+    );
+  }
+
+  return $blocks;
+}
+
+
+/**
+ * Implements hook_block_view().
+ */
+function islandora_blocks_block_view($delta = '') {
+  // If there is no object there are no blocks.
+  $object = menu_get_object('islandora_object', 2);
+  if (!$object) {
+    return false;
+  }
+
+  $block = array();
+  switch ($delta) {
+    case 'metadata':
+      $block['subject'] = t('Metadata');
+      $block['content'] = array(
+        '#theme' => 'islandora_dublin_core_display',
+        '#islandora_object' => $object,
+        '#print' => true,
+      );
+      break;
+
+    case 'collections':
+      $block['subject'] = t('Parent Collections');
+      $block['content'] = array(
+        '#theme' => 'item_list',
+        '#type' => 'ul',
+        '#items' => array(),
+      );
+      $parents = $object->relationships->get(null, 'isMemberOfCollection');
+      foreach ($parents as $parent) {
+        try {
+          $obj = islandora_object_load($parent['object']['value']);
+          $block['content']['#items'][] = l($obj->label, 'islandora/object/' . $obj->id);
+        } catch (Exception $e) {}
+      }
+      break;
+
+    case 'datastreams':
+      foreach ($object as $ds) {
+        try {
+          $pid = $object->id;
+          $id = $ds->id;
+          $label = $ds->label;
+          $download_path = islandora_datastream_get_url($ds, 'download');
+          $datastreams[$id]['id'] = $id;
+          $datastreams[$id]['label'] = $label;
+          $datastreams[$id]['label_link'] = islandora_datastream_access(ISLANDORA_VIEW_OBJECTS, $ds) ?
+            l($label, $download_path) :
+            $label;
+          $datastreams[$id]['download_url'] = $download_path;
+          $datastreams[$id]['mimetype'] = $ds->mimetype;
+          $datastreams[$id]['size'] = islandora_datastream_get_human_readable_size($ds);
+          $datastreams[$id]['created_date'] = $ds->createdDate->format("Y-m-d");
+          $datastreams[$id]['class'] = drupal_strtolower(preg_replace('/[^A-Za-z0-9]/', '-', $id));
+          $block['subject'] = t('Datastreams');
+          $block['content'] = array(
+            '#theme' => 'islandora_blocks_datastreams',
+            '#datastreams' => $datastreams,
+          );
+        }
+        catch (RepositoryException $e) {}
+      }
+      break;
+
+    case 'citation':
+      // To provide a citation we need a MODS record.
+      if (!isset($object['MODS'])) {
+        return false;
+      }
+      $block['subject'] = t('Citation');
+      $block['content'] = citeproc_bibliography_from_mods(citeproc_style(variable_get('islandora_blocks_citation_style')), $object['MODS']->content);
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function islandora_blocks_block_configure($delta = '') {
+  $form = array();
+  if ($delta == 'citation') {
+    module_load_include('inc', 'csl', 'includes/csl');
+    $form['islandora_blocks_citation_style'] = array(
+      '#type' => 'select',
+      '#title' => t('Citation Style to Use'),
+      '#default_value' => variable_get('islandora_blocks_citation_style'),
+      '#options' => drupal_map_assoc(CSL::GetNames()),
+      '#element_validate' => array('islandora_blocks_configure_validate'),
+    );
+  }
+
+  return $form;
+}
+
+function islandora_blocks_configure_validate($form, &$form_state) {
+  variable_set('islandora_blocks_citation_style', $form_state['values']['islandora_blocks_citation_style']);
+}
