@@ -68,6 +68,9 @@ function islandora_blocks_block_view($delta = '') {
         '#items' => array(),
       );
       $parents = $object->relationships->get(null, 'isMemberOfCollection');
+      if (count($parents) == 0) {
+        return false;
+      }
       foreach ($parents as $parent) {
         try {
           $obj = islandora_object_load($parent['object']['value']);
