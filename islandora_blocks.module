@@ -49,6 +49,12 @@ function islandora_blocks_block_view($delta = '') {
     return false;
   }
 
+  // We should be on the "view" callback.
+  $menu_item = menu_get_item();
+  if ($menu_item['path'] != 'islandora/object/%/view' && $menu_item['path'] != 'islandora/object/%') {
+    return false;
+  }
+
   $block = array();
   switch ($delta) {
     case 'metadata':
