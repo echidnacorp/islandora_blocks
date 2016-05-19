@@ -77,11 +77,20 @@ function islandora_blocks_block_view($delta = '') {
       if (count($parents) == 0) {
         return false;
       }
+      $return = false;
       foreach ($parents as $parent) {
         try {
           $obj = islandora_object_load($parent['object']['value']);
-          $block['content']['#items'][] = l($obj->label, 'islandora/object/' . $obj->id);
+          if ($obj) {
+            $return = true;
+            $block['content']['#items'][] = l($obj->label, 'islandora/object/' . $obj->id);
+          }
         } catch (Exception $e) {}
+      }
+
+      // Couldn't load any parents, return nothing.
+      if (!$return) {
+        return false;
       }
       break;
 
