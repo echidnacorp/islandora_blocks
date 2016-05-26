@@ -97,6 +97,7 @@ function islandora_blocks_block_view($delta = '') {
     case 'datastreams':
       foreach ($object as $ds) {
         try {
+          module_load_include('inc', 'islandora', 'includes/datastream');
           $pid = $object->id;
           $id = $ds->id;
           $label = $ds->label;
