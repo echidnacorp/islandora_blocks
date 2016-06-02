@@ -19,19 +19,23 @@ function islandora_blocks_block_info() {
 
   $blocks['metadata'] = array(
     'info' => t('Object Metadata'),
+    'cache' => DRUPAL_CACHE_PER_PAGE,
   );
 
   $blocks['collections'] = array(
     'info' => t('Object Collections'),
+    'cache' => DRUPAL_CACHE_PER_PAGE,
   );
 
   $blocks['datastreams'] = array(
     'info' => t('Object Datastreams'),
+    'cache' => DRUPAL_CACHE_PER_PAGE,
   );
 
   if (module_exists('csl')) {
     $blocks['citation'] = array(
       'info' => t('Object Citation'),
+      'cache' => DRUPAL_CACHE_PER_PAGE,
     );
   }
 
