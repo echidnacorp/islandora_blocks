@@ -58,12 +58,10 @@ function islandora_blocks_block_view($delta = '') {
   $block = array();
   switch ($delta) {
     case 'metadata':
+      $form = drupal_get_form('islandora_blocks_metadata_form', $object);
+
       $block['subject'] = t('Metadata');
-      $block['content'] = array(
-        '#theme' => 'islandora_dublin_core_display',
-        '#islandora_object' => $object,
-        '#print' => true,
-      );
+      $block['content'] = drupal_render($form);
       break;
 
     case 'collections':
@@ -156,4 +154,64 @@ function islandora_blocks_block_configure($delta = '') {
 
 function islandora_blocks_configure_validate($form, &$form_state) {
   variable_set('islandora_blocks_citation_style', $form_state['values']['islandora_blocks_citation_style']);
+}
+
+/**
+ * Form callback: Form constructor for a display of metadata.
+ *
+ * @param array $form
+ *   The form object.
+ * @param array &$form_state
+ *   The form state object. Must contain the Fedora object that we want to
+ *   display the metadata form as the first item in the array at
+ *   $form_state['build_info']['args'].
+ *
+ * @ingroup forms
+ */
+function islandora_blocks_metadata_form($form, &$form_state) {
+  // The Fedora object should be the first build argument.
+  $object = reset($form_state['build_info']['args']);
+
+  // Add a form control to toggle the visbile metadata.
+  $form['metadata_toggle'] = array(
+    '#type' => 'radios',
+    '#title' => t('Metadata to display'),
+    '#options' => array(
+      'dc_metadata' => t('Object metadata'),
+      'solr_metadata' => t('Solr metadata'),
+    ),
+    '#default_value' => 'dc_metadata',
+  );
+
+  // Render the object's DC metadata.
+  $form['dc_metadata'] = array(
+    '#type' => 'container',
+    'metadata' => array(
+      '#theme' => 'islandora_dublin_core_display',
+      '#islandora_object' => $object,
+      '#print' => TRUE,
+    ),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="metadata_toggle"]' => array('value' => 'dc_metadata'),
+      ),
+    ),
+  );
+
+  // Render the object's Solr metadata.
+  $form['solr_metadata'] = array(
+    '#type' => 'container',
+    'metadata' => array(
+      '#theme' => 'islandora_solr_metadata_display',
+      '#islandora_object' => $object,
+      '#print' => TRUE,
+    ),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="metadata_toggle"]' => array('value' => 'solr_metadata'),
+      ),
+    ),
+  );
+
+  return $form;
 }
