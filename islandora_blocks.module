@@ -179,6 +179,10 @@ function islandora_blocks_metadata_form($form, &$form_state) {
   if (module_exists('islandora_solr_metadata')) {
     $metadata_toggle_options['solr_metadata'] = t('Indexed (Solr) Metadata');
 
+    // Find the fields we should query and display.
+    module_load_include('inc', 'islandora_solr_metadata', 'includes/db');
+    $associations = islandora_solr_metadata_get_associations_by_cmodels($object->models);
+
     // Render the object's Solr metadata.
     $form['solr_metadata'] = array(
       '#type' => 'container',
@@ -186,6 +190,7 @@ function islandora_blocks_metadata_form($form, &$form_state) {
         '#theme' => 'islandora_solr_metadata_display',
         '#islandora_object' => $object,
         '#print' => TRUE,
+        '#associations' => $associations,
       ),
       '#states' => array(
         'visible' => array(
