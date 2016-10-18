@@ -195,16 +195,14 @@ function islandora_blocks_configure_validate($form, &$form_state) {
  * @ingroup forms
  */
 function islandora_blocks_metadata_form($form, &$form_state) {
-  $metadata_toggle_options = array();
+  $metadata_toggle_options = _islandora_blocks_available_metadata_sets();
 
   // The Fedora object should be the first build argument.
   $object = reset($form_state['build_info']['args']);
 
   // If the Solr metadata is available, add an option to the toggle and display
   // that container.
-  if (module_exists('islandora_solr_metadata')) {
-    $metadata_toggle_options['solr_metadata'] = t('Indexed (Solr) Metadata');
-
+  if (array_key_exists('solr_metadata', $metadata_toggle_options)) {
     // Find the fields we should query and display.
     module_load_include('inc', 'islandora_solr_metadata', 'includes/db');
     $associations = islandora_solr_metadata_get_associations_by_cmodels($object->models);
@@ -228,9 +226,7 @@ function islandora_blocks_metadata_form($form, &$form_state) {
 
   // If the Islandora module is available, add an option to the toggle and
   // display that container.
-  if (module_exists('islandora')) {
-    $metadata_toggle_options['dc_metadata'] = t('Basic (Dublin Core) Metadata');
-
+  if (array_key_exists('dc_metadata', $metadata_toggle_options)) {
     // Render the object's DC metadata.
     $form['dc_metadata'] = array(
       '#type' => 'container',
@@ -258,4 +254,35 @@ function islandora_blocks_metadata_form($form, &$form_state) {
   );
 
   return $form;
+}
+
+/* Helper functions. */
+
+/**
+ * Return a list of available metadata sets.
+ *
+ * @return array
+ *   An associative array of zero or more metadata sets:
+ *   - solr_metadata: Indexed (Solr) Metadata
+ *   - dc_metadata: Basic (Dublin Core) Metadata
+ */
+function _islandora_blocks_available_metadata_sets() {
+  // Cache metadata sets per request.
+  $available_metadata_sets = &drupal_static(__FUNCTION__);
+  if (!isset($available_metadata_sets)) {
+    $available_metadata_sets = array();
+
+    // If the Islandora Solr Metadata module is installed, we can display
+    // Indexed Solr metadata.
+    if (module_exists('islandora_solr_metadata')) {
+      $available_metadata_sets['solr_metadata'] = t('Indexed (Solr) Metadata');
+    }
+
+    // If the Islandora module is available, we can display DC metadata.
+    if (module_exists('islandora')) {
+      $available_metadata_sets['dc_metadata'] = t('Basic (Dublin Core) Metadata');
+    }
+  }
+
+  return $available_metadata_sets;
 }
