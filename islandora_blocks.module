@@ -52,13 +52,13 @@ function islandora_blocks_block_view($delta = '') {
   // If there is no object there are no blocks.
   $object = menu_get_object('islandora_object', 2);
   if (!$object) {
-    return false;
+    return FALSE;
   }
 
   // We should be on the "view" callback.
   $menu_item = menu_get_item();
   if ($menu_item['path'] != 'islandora/object/%/view' && $menu_item['path'] != 'islandora/object/%') {
-    return false;
+    return FALSE;
   }
 
   $block = array();
@@ -77,16 +77,16 @@ function islandora_blocks_block_view($delta = '') {
         '#type' => 'ul',
         '#items' => array(),
       );
-      $parents = $object->relationships->get(null, 'isMemberOfCollection');
+      $parents = $object->relationships->get(NULL, 'isMemberOfCollection');
       if (count($parents) == 0) {
-        return false;
+        return FALSE;
       }
-      $return = false;
+      $return = FALSE;
       foreach ($parents as $parent) {
         try {
           $obj = islandora_object_load($parent['object']['value']);
           if ($obj) {
-            $return = true;
+            $return = TRUE;
             $block['content']['#items'][] = l($obj->label, 'islandora/object/' . $obj->id);
           }
         } catch (Exception $e) {}
@@ -94,7 +94,7 @@ function islandora_blocks_block_view($delta = '') {
 
       // Couldn't load any parents, return nothing.
       if (!$return) {
-        return false;
+        return FALSE;
       }
       break;
 
@@ -129,7 +129,7 @@ function islandora_blocks_block_view($delta = '') {
     case 'citation':
       // To provide a citation we need a MODS record.
       if (!isset($object['MODS'])) {
-        return false;
+        return FALSE;
       }
       $block['subject'] = t('Citation');
       $block['content'] = citeproc_bibliography_from_mods(citeproc_style(variable_get('islandora_blocks_citation_style')), $object['MODS']->content);
