@@ -149,6 +149,7 @@ function islandora_blocks_block_view($delta = '') {
  */
 function islandora_blocks_block_configure($delta = '') {
   $form = array();
+
   if ($delta == 'citation') {
     module_load_include('inc', 'csl', 'includes/csl');
     $form['islandora_blocks_citation_style'] = array(
@@ -159,8 +160,30 @@ function islandora_blocks_block_configure($delta = '') {
       '#element_validate' => array('islandora_blocks_configure_validate'),
     );
   }
+  elseif ($delta === 'metadata') {
+    // Allow the block administrator to choose which metadata sets are displayed
+    // in the metadata block.
+    $form['islandora_blocks_metadata_sets_display'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Metadata sets to display'),
+      '#description' => t('Choose the sets of metadata to display. Only one dataset is displayed at a time; but if you choose more than one, a control will be shown to let the viewer toggle which set of metadata is currently shown.'),
+      '#options' => _islandora_blocks_available_metadata_sets(),
+      '#default_value' => variable_get('islandora_blocks_metadata_sets_display', array('dc_metadata' => 'dc_metadata')),
+    );
+  }
 
   return $form;
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function islandora_blocks_block_save($delta = '', $edit = array()) {
+  if ($delta === 'metadata') {
+    // Allow the block administrator to choose which metadata sets are displayed
+    // in the metadata block.
+    variable_set('islandora_blocks_metadata_sets_display', $edit['islandora_blocks_metadata_sets_display']);
+  }
 }
 
 /* Form API callbacks. */
@@ -195,14 +218,17 @@ function islandora_blocks_configure_validate($form, &$form_state) {
  * @ingroup forms
  */
 function islandora_blocks_metadata_form($form, &$form_state) {
-  $metadata_toggle_options = _islandora_blocks_available_metadata_sets();
+  $available_metadata_sets = _islandora_blocks_available_metadata_sets();
+  $configured_metadata_sets = variable_get('islandora_blocks_metadata_sets_display', array('dc_metadata' => 'dc_metadata'));
+  $to_display = array_intersect_key($available_metadata_sets, $configured_metadata_sets);
 
   // The Fedora object should be the first build argument.
   $object = reset($form_state['build_info']['args']);
 
-  // If the Solr metadata is available, add an option to the toggle and display
-  // that container.
-  if (array_key_exists('solr_metadata', $metadata_toggle_options)) {
+  // If we have determined that the dependencies to display Solr metadata are
+  // available, and the block administrator wants to display Solr metadata in
+  // this block, display the container.
+  if (array_key_exists('solr_metadata', $to_display)) {
     // Find the fields we should query and display.
     module_load_include('inc', 'islandora_solr_metadata', 'includes/db');
     $associations = islandora_solr_metadata_get_associations_by_cmodels($object->models);
@@ -224,9 +250,10 @@ function islandora_blocks_metadata_form($form, &$form_state) {
     );
   }
 
-  // If the Islandora module is available, add an option to the toggle and
-  // display that container.
-  if (array_key_exists('dc_metadata', $metadata_toggle_options)) {
+  // If we have determined that the dependencies to display DC metadata are
+  // available, and the block administrator wants to display DC metadata in this
+  // block, display the container.
+  if (array_key_exists('dc_metadata', $to_display)) {
     // Render the object's DC metadata.
     $form['dc_metadata'] = array(
       '#type' => 'container',
@@ -243,15 +270,17 @@ function islandora_blocks_metadata_form($form, &$form_state) {
     );
   }
 
-  // Add a form control to toggle the visbile metadata.
-  $metadata_toggle_default = (array_key_exists('solr_metadata', $metadata_toggle_options)) ? 'solr_metadata' : 'dc_metadata';
-  $form['metadata_toggle'] = array(
-    '#type' => 'radios',
-    '#title' => t('Metadata to display'),
-    '#options' => $metadata_toggle_options,
-    '#default_value' => $metadata_toggle_default,
-    '#weight' => -1,
-  );
+  // Add a form control to toggle the visible metadata.
+  if (count($to_display) > 1) {
+    $metadata_toggle_default = (array_key_exists('solr_metadata', $available_metadata_sets)) ? 'solr_metadata' : 'dc_metadata';
+    $form['metadata_toggle'] = array(
+      '#type' => 'radios',
+      '#title' => t('Metadata to display'),
+      '#options' => $to_display,
+      '#default_value' => $metadata_toggle_default,
+      '#weight' => -1,
+    );
+  }
 
   return $form;
 }
