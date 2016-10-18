@@ -1,6 +1,13 @@
 <?php
 
 /**
+ * @file
+ * Hooks, callbacks, and helper functions for the Islandora Blocks module.
+ */
+
+/* Hooks. */
+
+/**
  * Implements hook_theme().
  */
 function islandora_blocks_theme($existing, $type, $theme, $path) {
@@ -37,7 +44,6 @@ function islandora_blocks_block_info() {
 
   return $blocks;
 }
-
 
 /**
  * Implements hook_block_view().
@@ -152,6 +158,18 @@ function islandora_blocks_block_configure($delta = '') {
   return $form;
 }
 
+/* Form API callbacks. */
+
+/**
+ * Element validation callback: validate citation styles.
+ *
+ * @param array $form
+ *   A form array.
+ * @param array $form_state
+ *   A form state array.
+ *
+ * @see islandora_blocks_block_configure()
+ */
 function islandora_blocks_configure_validate($form, &$form_state) {
   variable_set('islandora_blocks_citation_style', $form_state['values']['islandora_blocks_citation_style']);
 }
@@ -165,6 +183,9 @@ function islandora_blocks_configure_validate($form, &$form_state) {
  *   The form state object. Must contain the Fedora object that we want to
  *   display the metadata form as the first item in the array at
  *   $form_state['build_info']['args'].
+ *
+ * @return array
+ *   A form array for metadata.
  *
  * @ingroup forms
  */
