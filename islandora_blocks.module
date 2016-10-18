@@ -89,7 +89,10 @@ function islandora_blocks_block_view($delta = '') {
             $return = TRUE;
             $block['content']['#items'][] = l($obj->label, 'islandora/object/' . $obj->id);
           }
-        } catch (Exception $e) {}
+        }
+        catch (Exception $e) {
+          // No-op.
+        }
       }
 
       // Couldn't load any parents, return nothing.
@@ -122,7 +125,9 @@ function islandora_blocks_block_view($delta = '') {
             '#datastreams' => $datastreams,
           );
         }
-        catch (RepositoryException $e) {}
+        catch (RepositoryException $e) {
+          // No-op.
+        }
       }
       break;
 
