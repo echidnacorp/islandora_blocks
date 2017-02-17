@@ -1,6 +1,13 @@
 <?php
 
 /**
+ * @file
+ * Hooks, callbacks, and helper functions for the Islandora Blocks module.
+ */
+
+/* Hooks. */
+
+/**
  * Implements hook_theme().
  */
 function islandora_blocks_theme($existing, $type, $theme, $path) {
@@ -38,7 +45,6 @@ function islandora_blocks_block_info() {
   return $blocks;
 }
 
-
 /**
  * Implements hook_block_view().
  */
@@ -46,24 +52,22 @@ function islandora_blocks_block_view($delta = '') {
   // If there is no object there are no blocks.
   $object = menu_get_object('islandora_object', 2);
   if (!$object) {
-    return false;
+    return FALSE;
   }
 
   // We should be on the "view" callback.
   $menu_item = menu_get_item();
   if ($menu_item['path'] != 'islandora/object/%/view' && $menu_item['path'] != 'islandora/object/%') {
-    return false;
+    return FALSE;
   }
 
   $block = array();
   switch ($delta) {
     case 'metadata':
+      $form = drupal_get_form('islandora_blocks_metadata_form', $object);
+
       $block['subject'] = t('Metadata');
-      $block['content'] = array(
-        '#theme' => 'islandora_dublin_core_display',
-        '#islandora_object' => $object,
-        '#print' => true,
-      );
+      $block['content'] = drupal_render($form);
       break;
 
     case 'collections':
@@ -73,24 +77,27 @@ function islandora_blocks_block_view($delta = '') {
         '#type' => 'ul',
         '#items' => array(),
       );
-      $parents = $object->relationships->get(null, 'isMemberOfCollection');
+      $parents = $object->relationships->get(NULL, 'isMemberOfCollection');
       if (count($parents) == 0) {
-        return false;
+        return FALSE;
       }
-      $return = false;
+      $return = FALSE;
       foreach ($parents as $parent) {
         try {
           $obj = islandora_object_load($parent['object']['value']);
           if ($obj) {
-            $return = true;
+            $return = TRUE;
             $block['content']['#items'][] = l($obj->label, 'islandora/object/' . $obj->id);
           }
-        } catch (Exception $e) {}
+        }
+        catch (Exception $e) {
+          // No-op.
+        }
       }
 
       // Couldn't load any parents, return nothing.
       if (!$return) {
-        return false;
+        return FALSE;
       }
       break;
 
@@ -118,14 +125,16 @@ function islandora_blocks_block_view($delta = '') {
             '#datastreams' => $datastreams,
           );
         }
-        catch (RepositoryException $e) {}
+        catch (RepositoryException $e) {
+          // No-op.
+        }
       }
       break;
 
     case 'citation':
       // To provide a citation we need a MODS record.
       if (!isset($object['MODS'])) {
-        return false;
+        return FALSE;
       }
       $block['subject'] = t('Citation');
       $block['content'] = citeproc_bibliography_from_mods(citeproc_style(variable_get('islandora_blocks_citation_style')), $object['MODS']->content);
@@ -140,6 +149,7 @@ function islandora_blocks_block_view($delta = '') {
  */
 function islandora_blocks_block_configure($delta = '') {
   $form = array();
+
   if ($delta == 'citation') {
     module_load_include('inc', 'csl', 'includes/csl');
     $form['islandora_blocks_citation_style'] = array(
@@ -150,10 +160,158 @@ function islandora_blocks_block_configure($delta = '') {
       '#element_validate' => array('islandora_blocks_configure_validate'),
     );
   }
+  elseif ($delta === 'metadata') {
+    // Allow the block administrator to choose which metadata sets are displayed
+    // in the metadata block.
+    $form['islandora_blocks_metadata_sets_display'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Metadata sets to display'),
+      '#description' => t('Choose the sets of metadata to display. Only one dataset is displayed at a time; but if you choose more than one, a control will be shown to let the viewer toggle which set of metadata is currently shown.'),
+      '#options' => _islandora_blocks_available_metadata_sets(),
+      '#default_value' => variable_get('islandora_blocks_metadata_sets_display', array('dc_metadata' => 'dc_metadata')),
+    );
+  }
 
   return $form;
 }
 
+/**
+ * Implements hook_block_save().
+ */
+function islandora_blocks_block_save($delta = '', $edit = array()) {
+  if ($delta === 'metadata') {
+    // Allow the block administrator to choose which metadata sets are displayed
+    // in the metadata block.
+    variable_set('islandora_blocks_metadata_sets_display', $edit['islandora_blocks_metadata_sets_display']);
+  }
+}
+
+/* Form API callbacks. */
+
+/**
+ * Element validation callback: validate citation styles.
+ *
+ * @param array $form
+ *   A form array.
+ * @param array $form_state
+ *   A form state array.
+ *
+ * @see islandora_blocks_block_configure()
+ */
 function islandora_blocks_configure_validate($form, &$form_state) {
   variable_set('islandora_blocks_citation_style', $form_state['values']['islandora_blocks_citation_style']);
+}
+
+/**
+ * Form callback: Form constructor for a display of metadata.
+ *
+ * @param array $form
+ *   The form object.
+ * @param array &$form_state
+ *   The form state object. Must contain the Fedora object that we want to
+ *   display the metadata form as the first item in the array at
+ *   $form_state['build_info']['args'].
+ *
+ * @return array
+ *   A form array for metadata.
+ *
+ * @ingroup forms
+ */
+function islandora_blocks_metadata_form($form, &$form_state) {
+  $available_metadata_sets = _islandora_blocks_available_metadata_sets();
+  $configured_metadata_sets = variable_get('islandora_blocks_metadata_sets_display', array('dc_metadata' => 'dc_metadata'));
+  $to_display = array_intersect_key($available_metadata_sets, $configured_metadata_sets);
+
+  // The Fedora object should be the first build argument.
+  $object = reset($form_state['build_info']['args']);
+
+  // If we have determined that the dependencies to display Solr metadata are
+  // available, and the block administrator wants to display Solr metadata in
+  // this block, display the container.
+  if (array_key_exists('solr_metadata', $to_display)) {
+    // Find the fields we should query and display.
+    module_load_include('inc', 'islandora_solr_metadata', 'includes/db');
+    $associations = islandora_solr_metadata_get_associations_by_cmodels($object->models);
+
+    // Render the object's Solr metadata.
+    $form['solr_metadata'] = array(
+      '#type' => 'container',
+      'metadata' => array(
+        '#theme' => 'islandora_solr_metadata_display',
+        '#islandora_object' => $object,
+        '#print' => TRUE,
+        '#associations' => $associations,
+      ),
+      '#states' => array(
+        'visible' => array(
+          ':input[name="metadata_toggle"]' => array('value' => 'solr_metadata'),
+        ),
+      ),
+    );
+  }
+
+  // If we have determined that the dependencies to display DC metadata are
+  // available, and the block administrator wants to display DC metadata in this
+  // block, display the container.
+  if (array_key_exists('dc_metadata', $to_display)) {
+    // Render the object's DC metadata.
+    $form['dc_metadata'] = array(
+      '#type' => 'container',
+      'metadata' => array(
+        '#theme' => 'islandora_dublin_core_display',
+        '#islandora_object' => $object,
+        '#print' => TRUE,
+      ),
+      '#states' => array(
+        'visible' => array(
+          ':input[name="metadata_toggle"]' => array('value' => 'dc_metadata'),
+        ),
+      ),
+    );
+  }
+
+  // Add a form control to toggle the visible metadata.
+  if (count($to_display) > 1) {
+    $metadata_toggle_default = (array_key_exists('solr_metadata', $available_metadata_sets)) ? 'solr_metadata' : 'dc_metadata';
+    $form['metadata_toggle'] = array(
+      '#type' => 'radios',
+      '#title' => t('Metadata to display'),
+      '#options' => $to_display,
+      '#default_value' => $metadata_toggle_default,
+      '#weight' => -1,
+    );
+  }
+
+  return $form;
+}
+
+/* Helper functions. */
+
+/**
+ * Return a list of available metadata sets.
+ *
+ * @return array
+ *   An associative array of zero or more metadata sets:
+ *   - solr_metadata: Indexed (Solr) Metadata
+ *   - dc_metadata: Basic (Dublin Core) Metadata
+ */
+function _islandora_blocks_available_metadata_sets() {
+  // Cache metadata sets per request.
+  $available_metadata_sets = &drupal_static(__FUNCTION__);
+  if (!isset($available_metadata_sets)) {
+    $available_metadata_sets = array();
+
+    // If the Islandora Solr Metadata module is installed, we can display
+    // Indexed Solr metadata.
+    if (module_exists('islandora_solr_metadata')) {
+      $available_metadata_sets['solr_metadata'] = t('Indexed (Solr) Metadata');
+    }
+
+    // If the Islandora module is available, we can display DC metadata.
+    if (module_exists('islandora')) {
+      $available_metadata_sets['dc_metadata'] = t('Basic (Dublin Core) Metadata');
+    }
+  }
+
+  return $available_metadata_sets;
 }
